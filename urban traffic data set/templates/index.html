@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TrafficWise AI - Analytics & Prediction Dashboard</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body data-theme="light">
+
+    <!-- SIDEBAR -->
+    <nav class="sidebar">
+        <div class="sidebar-logo">
+            <span>🚦</span> TrafficWise AI
+        </div>
+        <ul class="sidebar-menu">
+            <li class="sidebar-menu-item active">
+                <a href="#dashboard">
+                    <span>📊</span> Dashboard
+                </a>
+            </li>
+            <li class="sidebar-menu-item">
+                <a href="#predictions">
+                    <span>🔮</span> Predictions
+                </a>
+            </li>
+        </ul>
+        <div class="theme-toggle-container">
+            <button class="theme-btn" id="themeToggler" onclick="toggleTheme()">
+                <span id="themeBtnIcon">🌙</span> <span id="themeBtnText">Dark Mode</span>
+            </button>
+        </div>
+    </nav>
+
+    <!-- MAIN CONTENT LAYOUT -->
+    <main class="main-layout">
+        
+        <!-- TOPBAR -->
+        <header class="topbar">
+            <div class="topbar-title">
+                <h1 id="dashboard">Urban Traffic Analytics</h1>
+            </div>
+            <div class="topbar-date" style="font-size: 14px; font-weight: 500; color: var(--text-secondary);">
+                Live System Status
+            </div>
+        </header>
+
+        <!-- FILTERS PANEL -->
+        <section class="filters-container">
+            <form method="GET" class="filters-form">
+                <div class="filter-group">
+                    <label for="filter-day">Filter by Day</label>
+                    <select name="day" id="filter-day">
+                        <option value="">All Days</option>
+                        {% for d in all_days %}
+                        <option value="{{ d }}" {% if d == selected_day %}selected{% endif %}>{{ d }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                
+                <div class="filter-group">
+                    <label for="filter-location">Filter by Junction/Location</label>
+                    <select name="location" id="filter-location">
+                        <option value="">All Locations</option>
+                        {% for l in all_locations %}
+                        <option value="{{ l }}" {% if l|string == selected_location|string %}selected{% endif %}>Junction {{ l }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                
+                <button type="submit" class="filter-submit-btn">Apply Filters</button>
+            </form>
+        </section>
+
+        <!-- DASHBOARD CONTAINER -->
+        <div class="dashboard-content">
+            
+            <!-- KPI CARDS -->
+            <section class="kpis-grid">
+                <div class="kpi-card">
+                    <div class="kpi-icon-container">🚗</div>
+                    <div class="kpi-info">
+                        <span class="kpi-title">Average Hourly Traffic</span>
+                        <span class="kpi-value">{{ total_traffic }}</span>
+                    </div>
+                </div>
+                
+                <div class="kpi-card">
+                    <div class="kpi-icon-container">⏰</div>
+                    <div class="kpi-info">
+                        <span class="kpi-title">Busiest Hour</span>
+                        <span class="kpi-value">{% if peak_hour < 10 %}0{% endif %}{{ peak_hour }}:00</span>
+                    </div>
+                </div>
+                
+                <div class="kpi-card">
+                    <div class="kpi-icon-container">📍</div>
+                    <div class="kpi-info">
+                        <span class="kpi-title">Busiest Junction</span>
+                        <span class="kpi-value">Junction {{ busy_location }}</span>
+                    </div>
+                </div>
+            </section>
+
+            <!-- PREDICTION PANEL -->
+            <section class="prediction-panel" id="predictions">
+                <div class="pred-form-side">
+                    <h2>Traffic Flow Prediction</h2>
+                    <p style="font-size: 14px; color: var(--text-secondary); margin-bottom: 8px;">
+                        Select a junction and a date/time to predict congestion levels using our optimized ML model.
+                    </p>
+                    
+                    <form id="predictionForm" onsubmit="getPrediction(event)" class="filters-form" style="display: flex; flex-direction: column; align-items: stretch; gap: 16px;">
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+                            <div class="filter-group">
+                                <label for="pred-location">Select Junction</label>
+                                <select id="pred-location" required>
+                                    <option value="1">Junction 1</option>
+                                    <option value="2">Junction 2</option>
+                                    <option value="3">Junction 3</option>
+                                    <option value="4">Junction 4</option>
+                                </select>
+                            </div>
+                            
+                            <div class="filter-group">
+                                <label for="pred-date">Select Date</label>
+                                <input type="date" id="pred-date" value="2026-07-12" required>
+                            </div>
+                        </div>
+
+                        <div class="filter-group">
+                            <div style="display: flex; justify-content: space-between;">
+                                <label for="pred-hour">Select Hour: <span id="hourLabel" style="font-weight: 700; color: var(--accent-color);">12:00</span></label>
+                            </div>
+                            <input type="range" id="pred-hour" min="0" max="23" value="12" step="1" oninput="updateHourLabel(this.value)">
+                        </div>
+
+                        <button type="submit" class="filter-submit-btn" style="padding: 12px;">Predict Traffic Volume</button>
+                    </form>
+                </div>
+                
+                <div class="pred-result-side">
+                    <!-- Loading state -->
+                    <div class="pred-loader" id="predLoader"></div>
+                    
+                    <!-- Empty state -->
+                    <div class="pred-empty-state" id="predEmptyState">
+                        <div class="pred-empty-icon">🔮</div>
+                        <h3>Prediction Results</h3>
+                        <p style="font-size: 13px;">Submit the details on the left to estimate traffic density.</p>
+                    </div>
+                    
+                    <!-- Output state -->
+                    <div class="pred-output" id="predOutput">
+                        <div class="pred-output-header">Predicted Traffic Volume</div>
+                        <div class="pred-output-value">
+                            <span id="predictedVehicles">0</span>
+                            <span class="pred-output-unit">vehicles/hr</span>
+                        </div>
+                        <div id="trafficCategoryBadge" class="badge">Low</div>
+                        
+                        <div class="pred-details-grid">
+                            <div class="pred-detail-item">
+                                <span class="pred-detail-label">Junction</span>
+                                <span class="pred-detail-val" id="predDetailLocation">Junction 1</span>
+                            </div>
+                            <div class="pred-detail-item">
+                                <span class="pred-detail-label">Target Day</span>
+                                <span class="pred-detail-val" id="predDetailDay">Sunday</span>
+                            </div>
+                            <div class="pred-detail-item">
+                                <span class="pred-detail-label">Peak Congestion Time</span>
+                                <span class="pred-detail-val" id="predDetailPeakHour">18:00</span>
+                            </div>
+                            <div class="pred-detail-item">
+                                <span class="pred-detail-label">Peak Volume</span>
+                                <span class="pred-detail-val" id="predDetailPeakVolume">42 v/h</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- CHARTS GRID -->
+            <section class="charts-grid">
+                {% set charts = [
+                    ('hourChart', 'Traffic Flow by Hour of Day'),
+                    ('dayChart', 'Average Traffic by Day of Week'),
+                    ('locChart', 'Traffic Load by Junction'),
+                    ('peakChart', 'Peak Hours vs Non-Peak Traffic'),
+                    ('topChart', 'Top 5 Busiest Junction Periods'),
+                    ('trendChart', 'Traffic Volume Historical Trend'),
+                    ('weekChart', 'Weekday vs Weekend Load')
+                ] %}
+
+                {% for id, title in charts %}
+                <div class="chart-card">
+                    <div class="chart-header">
+                        <h3 class="chart-title">{{ title }}</h3>
+                        <div class="chart-actions">
+                            <button class="chart-action-btn" title="Expand View" onclick="openFullscreen('{{ id }}', '{{ title }}')">⛶</button>
+                        </div>
+                    </div>
+                    <div class="chart-wrapper">
+                        <!-- Chart Loading Skeleton -->
+                        <div class="chart-skeleton" id="skeleton-{{ id }}">
+                            <div class="chart-skeleton-spinner"></div>
+                            Loading chart...
+                        </div>
+                        <canvas id="{{ id }}"></canvas>
+                    </div>
+                </div>
+                {% endfor %}
+            </section>
+        </div>
+    </main>
+
+    <!-- FULLSCREEN MODAL -->
+    <div class="modal-overlay" id="fullscreenModal" onclick="closeFullscreen()">
+        <div class="modal-content" onclick="event.stopPropagation()">
+            <div class="modal-header">
+                <h3 class="modal-title" id="modalChartTitle">Expanded Chart</h3>
+                <button class="modal-close-btn" onclick="closeFullscreen()">✖</button>
+            </div>
+            <div class="modal-body">
+                <canvas id="fullscreenCanvas"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- DATA INITIALIZATION SCRIPT -->
+    <script>
+        // Inject data from Flask backend safely
+        const hours = {{ hours | tojson }};
+        const hour_values = {{ hour_values | tojson }};
+
+        const days = {{ days | tojson }};
+        const day_values = {{ day_values | tojson }};
+
+        const locations = {{ locations | tojson }};
+        const loc_values = {{ loc_values | tojson }};
+
+        const peak_labels = {{ peak_labels | tojson }};
+        const peak_values = {{ peak_values | tojson }};
+
+        const top_locations = {{ top_locations | tojson }};
+        const top_values = {{ top_values | tojson }};
+
+        const trend_dates = {{ trend_dates | tojson }};
+        const trend_values = {{ trend_values | tojson }};
+
+        const week_labels = {{ week_labels | tojson }};
+        const week_values = {{ week_values | tojson }};
+    </script>
+
+    <!-- CUSTOM DASHBOARD INTERACTIVES JS -->
+    <script src="{{ url_for('static', filename='js/script.js') }}"></script>
+
+</body>
+</html>
